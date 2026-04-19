@@ -2,35 +2,29 @@ import { prisma } from '../config/database';
 import { GitHubService } from '../modules/github/github.service';
 import { scoringEngine } from '../modules/scoring/scoring.engine';
 
-// Queue is disabled (no Redis required) — set to null so routes can check and fall back to direct execution
+// Queue is disabled (no Redis required) — direct execution mode
 export const analysisQueue: null = null;
 
-/**
- * Init queues (DISABLED VERSION)
- */
+/** Init queues (no-op in PAT direct-execution mode) */
 export async function initQueues() {
-  console.log("⚠️ Redis disabled - running without queues (direct execution mode)");
+  console.log('⚠️  Running without Redis — all analysis runs directly via GitHub PAT');
 }
 
 /**
- * Direct function to run GitHub ingestion (no queue)
+ * Ingest GitHub data for a user using the server PAT.
+ * No user OAuth token needed — uses the server's GITHUB_TOKEN env var.
  */
 export async function runGitHubIngestionDirect(
   userId: string,
   githubUsername: string
-) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+): Promise<{ success: boolean }> {
+  console.log(`🚀 Starting GitHub ingestion for @${githubUsername} (userId: ${userId})`);
 
-  if (!user?.accessToken) {
-    throw new Error('No GitHub access token');
-  }
-
-  console.log("🚀 Fetching repositories...");
-
-  const githubService = new GitHubService(user.accessToken);
+  // Always use the server PAT — no user token lookup needed
+  const githubService = new GitHubService();
   await githubService.ingestUserData(userId, githubUsername);
 
-  console.log("📊 Calculating scores...");
+  console.log('📊 Calculating scores...');
 
   const repos = await prisma.repository.findMany({
     where: { userId },
@@ -40,23 +34,19 @@ export async function runGitHubIngestionDirect(
     },
   });
 
-  await scoringEngine.calculateScore({
-    repositories: repos,
-    userId,
-  });
-
-  console.log("✅ Analysis complete!");
+  if (repos.length > 0) {
+    await scoringEngine.calculateScore({ repositories: repos, userId });
+    console.log(`✅ Scored ${repos.length} repos for @${githubUsername}`);
+  }
 
   return { success: true };
 }
 
-/**
- * Direct full analysis (no queue)
- */
+/** Full analysis = ingestion + scoring (same thing currently) */
 export async function runFullAnalysisDirect(
   userId: string,
   githubUsername: string
-) {
-  console.log("🚀 Starting full analysis...");
+): Promise<{ success: boolean }> {
+  console.log('🚀 Starting full analysis...');
   return runGitHubIngestionDirect(userId, githubUsername);
 }
