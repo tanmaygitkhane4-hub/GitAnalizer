@@ -1,182 +1,204 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  ResponsiveContainer,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
-  Tooltip,
-  Legend,
+  ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis,
+  PolarRadiusAxis, Radar, Tooltip, Legend,
 } from "recharts";
 import CountUp from "@/components/animations/CountUp";
 import ClickSpark from "@/components/animations/ClickSpark";
-import { Link } from "@tanstack/react-router";
-import { auditMeta, radarData, criticalFindings } from "@/lib/mockData";
+import { PageSkeleton, PageError, AnalysisBanner } from "@/components/dashboard/DashboardUI";
+import { useAnalysisResults, buildRadarFromScore, levelLabel, nextLevelLabel } from "@/hooks/use-dashboard";
 
 function DashboardIndex() {
+  const { data, loading, error, refresh } = useAnalysisResults();
+
+  if (loading) return <PageSkeleton />;
+  if (error) return <PageError message={error} retry={refresh} />;
+
+  const score = data?.score;
+  const repos = data?.repositories ?? [];
+  const jobs = data?.recentJobs ?? [];
+  const latestJob = jobs[0] ?? null;
+
+  const radarData = score ? buildRadarFromScore(score) : [];
+  const reposAnalyzed = repos.length;
+  const issuesFound = repos.filter(r => !r.hasReadme || !r.hasTests).length;
+
+  // Derive critical findings from repos with issues
+  const criticalFindings = repos
+    .filter(r => !r.hasTests || !r.hasReadme)
+    .slice(0, 4)
+    .map(r => ({
+      severity: !r.hasTests ? "CRITICAL" : "WARNING",
+      title: !r.hasTests
+        ? `No tests in "${r.name}"`
+        : `Missing README in "${r.name}"`,
+      description: !r.hasTests
+        ? `${r.name} has ${r._count?.commits ?? 0} commits but no test files found. Add tests to improve code reliability.`
+        : `${r.name} has no README. Add documentation to improve discoverability.`,
+    }));
+
   return (
     <div className="space-y-16">
+      {latestJob && <AnalysisBanner job={latestJob} />}
+
       <header>
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-violet-glow/70">
           /dashboard / overview
         </div>
         <h1 className="mt-3 text-3xl font-black tracking-tight md:text-4xl">
-          Hey {auditMeta.user}, here's the truth.
+          {score ? "Here's the truth." : "Run an analysis to see your scores."}
         </h1>
         <p className="mt-3 max-w-2xl font-mono text-xs text-muted-foreground">
-          // analyzed {auditMeta.reposAnalyzed} repos · ~84,000 loc · 1,247 commits · 38h of git history
+          // analyzed {reposAnalyzed} repos · {issuesFound} issues found
+          {score && ` · level: ${levelLabel(score.level)}`}
         </p>
       </header>
 
-      {/* Composite score — enormous raw number */}
-      <section className="relative flex items-end gap-6 md:gap-10 py-6">
-        <div className="flex items-end leading-[0.85]">
-          <span
-            className="font-black tabular-nums text-foreground"
-            style={{ fontSize: "clamp(6rem, 18vw, 14rem)", letterSpacing: "-0.06em" }}
-          >
-            <CountUp to={auditMeta.composite} duration={1.8} />
-          </span>
-          <span className="ml-3 mb-3 font-mono text-base text-muted-foreground md:text-lg">/ 100</span>
-        </div>
-        <div
-          className="hidden self-stretch md:flex items-end pb-4"
-          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-        >
-          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-violet-glow/60">
-            composite score
-          </span>
-        </div>
-
-        <div className="ml-auto hidden md:flex flex-col items-end gap-1 pb-3 text-right">
-          <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            percentile
-          </div>
-          <div className="font-mono text-3xl font-bold text-cyan">
-            top <CountUp to={auditMeta.percentile} />%
-          </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <MiniMetric label="Repos analyzed" value={auditMeta.reposAnalyzed} accent="violet-glow" />
-        <MiniMetric label="Issues found" value={auditMeta.issuesFound} accent="danger" />
-        <MiniMetric label="Critical fixes" value={5} accent="danger" />
-        <MiniMetric label="Quick wins" value={12} accent="success" />
-      </section>
-
-      {/* Diagonal claimed/actual banner */}
-      <section className="relative grid h-[180px] grid-cols-2 overflow-hidden rounded-md md:h-[200px]">
-        <div className="slash-left flex flex-col justify-center bg-[#0d0d0d] px-6 md:px-10">
-          <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            you claimed
-          </div>
-          <div className="mt-2 text-4xl font-black md:text-5xl">{auditMeta.claimedLevel}</div>
-        </div>
-        <div className="slash-right flex flex-col justify-center bg-[#12091f] px-6 text-right md:px-10">
-          <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-warning/80">
-            we found
-          </div>
-          <div className="mt-2 text-4xl font-black text-warning md:text-5xl">{auditMeta.actualLevel}</div>
-        </div>
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 text-center font-mono text-[10px] text-muted-foreground md:bottom-4 md:text-xs">
-          {auditMeta.mismatchNote}
-        </div>
-      </section>
-
-      {/* Skill radar */}
-      <section>
-        <SectionHeading kicker="01" title="Skill: claimed vs reality" />
-        <div className="mt-8 h-[420px] rounded-md border border-[#1a1a1a] bg-[#0d0d0d] p-4 md:p-6">
-          <ResponsiveContainer width="100%" height="100%">
-            <RadarChart data={radarData} outerRadius="70%">
-              <PolarGrid stroke="#1a1a1a" />
-              <PolarAngleAxis dataKey="axis" stroke="#888" tick={{ fontSize: 11, fill: "#888", fontFamily: "Space Grotesk" }} />
-              <PolarRadiusAxis stroke="#1a1a1a" tick={false} axisLine={false} domain={[0, 100]} />
-              <Radar name="Claimed" dataKey="claimed" stroke="#a78bfa" strokeDasharray="3 3" fill="#a78bfa" fillOpacity={0.04} />
-              <Radar name="Actual" dataKey="actual" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.30} />
-              <Legend wrapperStyle={{ fontSize: 11, fontFamily: "JetBrains Mono", textTransform: "uppercase", letterSpacing: "0.1em" }} />
-              <Tooltip contentStyle={{ background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 4, fontSize: 12 }} />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-
-      {/* Top critical findings */}
-      <section>
-        <SectionHeading kicker="02" title="Your biggest problems" />
-        <div className="mt-8 space-y-3">
-          {criticalFindings.map((f, i) => {
-            const accent = f.severity === "CRITICAL" ? "border-l-danger" : "border-l-warning";
-            const accentText = f.severity === "CRITICAL" ? "text-danger" : "text-warning";
-            return (
-              <div
-                key={i}
-                className={`group relative flex items-start gap-5 border-l-[3px] bg-[#0d0d0d] p-5 transition hover:bg-[#0f0f0f] ${accent}`}
+      {/* Composite score */}
+      {score ? (
+        <>
+          <section className="relative flex items-end gap-6 py-6 md:gap-10">
+            <div className="flex items-end leading-[0.85]">
+              <span
+                className="font-black tabular-nums text-foreground"
+                style={{ fontSize: "clamp(6rem, 18vw, 14rem)", letterSpacing: "-0.06em" }}
               >
-                <div className="min-w-0 flex-1">
-                  <div className={`font-mono text-[10px] font-bold uppercase tracking-[0.2em] ${accentText}`}>
-                    {f.severity}
-                  </div>
-                  <h3 className="mt-2 text-base font-semibold md:text-lg">{f.title}</h3>
-                  <p className="mt-2 font-mono text-xs leading-relaxed text-muted-foreground">{f.description}</p>
-                </div>
-                <ClickSpark>
-                  <Link
-                    to="/dashboard/code"
-                    className="hidden shrink-0 self-center font-mono text-[10px] uppercase tracking-[0.2em] text-violet-glow transition hover:text-white md:block"
-                  >
-                    view →
-                  </Link>
-                </ClickSpark>
+                <CountUp to={score.composite} duration={1.8} />
+              </span>
+              <span className="ml-3 mb-3 font-mono text-base text-muted-foreground md:text-lg">/ 100</span>
+            </div>
+            <div
+              className="hidden self-stretch md:flex items-end pb-4"
+              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+            >
+              <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-violet-glow/60">
+                composite score
+              </span>
+            </div>
+            <div className="ml-auto hidden md:flex flex-col items-end gap-1 pb-3 text-right">
+              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">percentile</div>
+              <div className="font-mono text-3xl font-bold text-cyan">
+                top <CountUp to={score.percentile} />%
               </div>
-            );
-          })}
-        </div>
-      </section>
+            </div>
+          </section>
 
-      {/* Salary bar */}
-      <section className="rounded-md border border-[#1a1a1a] bg-[#0d0d0d] p-6 md:p-8">
-        <SectionHeading kicker="03" title="Where you sit on salary" small />
-        <div className="mt-8">
-          <div className="relative h-4 overflow-hidden rounded-full bg-[#111]">
-            <div className="absolute inset-y-0 left-[18%] w-[20%] rounded-full bg-violet" />
-            <div className="absolute inset-y-0 left-[40%] w-[24%] rounded-full border border-dashed border-warning" />
-          </div>
-          <div className="mt-3 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            <span>$40k</span><span>$80k</span><span>$120k</span><span>$160k</span><span>$200k+</span>
-          </div>
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
-            <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                current bracket
-              </div>
-              <div className="mt-2 text-3xl font-black tabular-nums">
-                $<CountUp to={60} />k – $<CountUp to={80} />k
-              </div>
+          <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <MiniMetric label="Repos analyzed" value={reposAnalyzed} accent="violet-glow" />
+            <MiniMetric label="Issues found" value={issuesFound} accent="danger" />
+            <MiniMetric label="Without tests" value={repos.filter(r => !r.hasTests).length} accent="danger" />
+            <MiniMetric label="With README" value={repos.filter(r => r.hasReadme).length} accent="success" />
+          </section>
+
+          {/* Claimed vs Actual level */}
+          <section className="relative grid h-[180px] grid-cols-2 overflow-hidden rounded-md md:h-[200px]">
+            <div className="slash-left flex flex-col justify-center bg-[#0d0d0d] px-6 md:px-10">
+              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">claimed level</div>
+              <div className="mt-2 text-4xl font-black md:text-5xl">{nextLevelLabel(score.level)}</div>
             </div>
-            <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-warning/80">
-                reach with 4 skills
-              </div>
-              <div className="mt-2 text-3xl font-black tabular-nums text-warning">
-                $<CountUp to={80} />k – $<CountUp to={110} />k
-              </div>
+            <div className="slash-right flex flex-col justify-center bg-[#12091f] px-6 text-right md:px-10">
+              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-warning/80">we found</div>
+              <div className="mt-2 text-4xl font-black text-warning md:text-5xl">{levelLabel(score.level)}</div>
             </div>
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 text-center font-mono text-[10px] text-muted-foreground md:bottom-4 md:text-xs">
+              {score.composite < 70
+                ? "Your code tells a different story than your title."
+                : "Strong match — you're coding at the level you claim."}
+            </div>
+          </section>
+
+          {/* Radar chart */}
+          {radarData.length > 0 && (
+            <section>
+              <SectionHeading kicker="01" title="Skill: claimed vs reality" />
+              <div className="mt-8 h-[420px] rounded-md border border-[#1a1a1a] bg-[#0d0d0d] p-4 md:p-6">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={radarData} outerRadius="70%">
+                    <PolarGrid stroke="#1a1a1a" />
+                    <PolarAngleAxis dataKey="axis" stroke="#888" tick={{ fontSize: 11, fill: "#888", fontFamily: "Space Grotesk" }} />
+                    <PolarRadiusAxis stroke="#1a1a1a" tick={false} axisLine={false} domain={[0, 100]} />
+                    <Radar name="Claimed" dataKey="claimed" stroke="#a78bfa" strokeDasharray="3 3" fill="#a78bfa" fillOpacity={0.04} />
+                    <Radar name="Actual" dataKey="actual" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.30} />
+                    <Legend wrapperStyle={{ fontSize: 11, fontFamily: "JetBrains Mono", textTransform: "uppercase", letterSpacing: "0.1em" }} />
+                    <Tooltip contentStyle={{ background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 4, fontSize: 12 }} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+          )}
+
+          {/* Critical findings */}
+          {criticalFindings.length > 0 && (
+            <section>
+              <SectionHeading kicker="02" title="Your biggest problems" />
+              <div className="mt-8 space-y-3">
+                {criticalFindings.map((f, i) => {
+                  const accent = f.severity === "CRITICAL" ? "border-l-danger" : "border-l-warning";
+                  const accentText = f.severity === "CRITICAL" ? "text-danger" : "text-warning";
+                  return (
+                    <div key={i} className={`group relative flex items-start gap-5 border-l-[3px] bg-[#0d0d0d] p-5 transition hover:bg-[#0f0f0f] ${accent}`}>
+                      <div className="min-w-0 flex-1">
+                        <div className={`font-mono text-[10px] font-bold uppercase tracking-[0.2em] ${accentText}`}>{f.severity}</div>
+                        <h3 className="mt-2 text-base font-semibold md:text-lg">{f.title}</h3>
+                        <p className="mt-2 font-mono text-xs leading-relaxed text-muted-foreground">{f.description}</p>
+                      </div>
+                      <ClickSpark>
+                        <Link to="/dashboard/code" className="hidden shrink-0 self-center font-mono text-[10px] uppercase tracking-[0.2em] text-violet-glow transition hover:text-white md:block">
+                          view →
+                        </Link>
+                      </ClickSpark>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Score breakdown */}
+          <section className="rounded-md border border-[#1a1a1a] bg-[#0d0d0d] p-6 md:p-8">
+            <SectionHeading kicker="03" title="Score breakdown" small />
+            <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {[
+                { label: "Code Quality", value: score.codeQuality },
+                { label: "Project Depth", value: score.projectDepth },
+                { label: "Consistency", value: score.consistency },
+                { label: "Security", value: score.security },
+                { label: "UI / UX", value: score.uiUx },
+              ].map(dim => (
+                <ScoreDimension key={dim.label} label={dim.label} value={dim.value} />
+              ))}
+            </div>
+          </section>
+        </>
+      ) : (
+        /* No analysis yet */
+        <section className="flex min-h-[40vh] flex-col items-center justify-center gap-6 text-center">
+          <div className="font-mono text-6xl text-muted-foreground/20">?</div>
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              no analysis yet
+            </div>
+            <p className="mt-2 max-w-md font-mono text-sm text-muted-foreground">
+              {latestJob?.status === "RUNNING"
+                ? "Analysis is running — this page will refresh automatically."
+                : "Link your GitHub account and run your first analysis to see scores here."}
+            </p>
           </div>
-        </div>
-      </section>
+          {latestJob?.status === "RUNNING" && (
+            <div className="flex items-center gap-2 font-mono text-xs text-violet-glow">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-violet-glow" />
+              {latestJob.message ?? "Analysis running…"}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
 
 function MiniMetric({ label, value, accent }: { label: string; value: number; accent: string }) {
   const colorMap: Record<string, string> = {
-    "violet-glow": "text-violet-glow",
-    danger: "text-danger",
-    success: "text-success",
-    cyan: "text-cyan",
+    "violet-glow": "text-violet-glow", danger: "text-danger", success: "text-success", cyan: "text-cyan",
   };
   return (
     <div className="border-l-2 border-[#1a1a1a] pl-4 py-2">
@@ -188,15 +210,26 @@ function MiniMetric({ label, value, accent }: { label: string; value: number; ac
   );
 }
 
+function ScoreDimension({ label, value }: { label: string; value: number }) {
+  const color = value >= 70 ? "#10b981" : value >= 40 ? "#f59e0b" : "#ef4444";
+  return (
+    <div className="border-l-[2px] border-[#1a1a1a] bg-[#0a0a0a] p-4">
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
+      <div className="mt-2 text-3xl font-black tabular-nums" style={{ color }}>
+        <CountUp to={value} duration={1.2} />
+      </div>
+      <div className="mt-2 h-1 overflow-hidden bg-[#1a1a1a] rounded-full">
+        <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${value}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
+
 function SectionHeading({ kicker, title, small = false }: { kicker: string; title: string; small?: boolean }) {
   return (
     <div>
-      <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-violet-glow/70">
-        / {kicker}
-      </div>
-      <h2 className={`mt-2 font-black tracking-tight ${small ? "text-2xl md:text-3xl" : "text-3xl md:text-4xl"}`}>
-        {title}
-      </h2>
+      <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-violet-glow/70">/ {kicker}</div>
+      <h2 className={`mt-2 font-black tracking-tight ${small ? "text-2xl md:text-3xl" : "text-3xl md:text-4xl"}`}>{title}</h2>
     </div>
   );
 }
