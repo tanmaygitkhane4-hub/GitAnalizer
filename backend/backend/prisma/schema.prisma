@@ -1,0 +1,154 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String        @id @default(cuid())
+  email           String?       @unique
+  password        String?
+  name            String?
+  avatar          String?
+  bio             String?
+  githubId        String?       @unique
+  githubUsername  String?
+  accessToken     String?
+  portfolioLinks  String?       // JSON array stored as string
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  repositories    Repository[]
+  scores          Score[]
+  reports         Report[]
+  analysisJobs    AnalysisJob[]
+  jobMatches      JobMatch[]
+}
+
+model Repository {
+  id            String    @id @default(cuid())
+  userId        String
+  githubId      Int       @unique
+  name          String
+  fullName      String
+  description   String?
+  language      String?
+  languages     String?   // JSON stored as string
+  stars         Int       @default(0)
+  forks         Int       @default(0)
+  watchers      Int       @default(0)
+  openIssues    Int       @default(0)
+  size          Int       @default(0)
+  isPrivate     Boolean   @default(false)
+  isFork        Boolean   @default(false)
+  hasTests      Boolean   @default(false)
+  hasReadme     Boolean   @default(false)
+  defaultBranch String    @default("main")
+  htmlUrl       String
+  cloneUrl      String
+  topics        String?   // JSON array
+  pushedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commits       Commit[]
+  analysis      RepositoryAnalysis?
+}
+
+model Commit {
+  id            String    @id @default(cuid())
+  repositoryId  String
+  sha           String    @unique
+  message       String
+  authorName    String
+  authorEmail   String
+  additions     Int       @default(0)
+  deletions     Int       @default(0)
+  changedFiles  Int       @default(0)
+  committedAt   DateTime
+  createdAt     DateTime  @default(now())
+
+  repository    Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+}
+
+model RepositoryAnalysis {
+  id              String    @id @default(cuid())
+  repositoryId    String    @unique
+  codeQuality     Float     @default(0)
+  testCoverage    Float     @default(0)
+  security        Float     @default(0)
+  documentation   Float     @default(0)
+  architecture    Float     @default(0)
+  performance     Float     @default(0)
+  issues          String?   // JSON array
+  suggestions     String?   // JSON array
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  repository      Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+}
+
+model Score {
+  id              String    @id @default(cuid())
+  userId          String
+  composite       Float     @default(0)
+  codeQuality     Float     @default(0)
+  consistency     Float     @default(0)
+  security        Float     @default(0)
+  uiUx            Float     @default(0)
+  projectDepth    Float     @default(0)
+  testing         Float     @default(0)
+  documentation   Float     @default(0)
+  level           String    @default("JUNIOR")
+  percentile      Float     @default(0)
+  createdAt       DateTime  @default(now())
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id              String    @id @default(cuid())
+  userId          String
+  summary         String?
+  criticalIssues  String?   // JSON
+  improvements    String?   // JSON
+  roadmap         String?   // JSON
+  resumeSuggestions String? // JSON
+  createdAt       DateTime  @default(now())
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AnalysisJob {
+  id          String    @id @default(cuid())
+  userId      String
+  type        String    // FULL_ANALYSIS | GITHUB_INGESTION | SCORING
+  status      String    @default("QUEUED") // QUEUED | RUNNING | COMPLETED | FAILED
+  message     String?
+  bullJobId   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model JobMatch {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String
+  company     String?
+  minSalary   Int?
+  maxSalary   Int?
+  matchScore  Float     @default(0)
+  url         String?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

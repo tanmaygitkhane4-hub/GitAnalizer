@@ -1,0 +1,40 @@
+# ─── Node / npm ───────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ─── Build outputs ────────────────────────────────────────────────────────────
+dist/
+build/
+.output/
+
+# ─── Environment files ────────────────────────────────────────────────────────
+# Keep .env.example, ignore real secrets
+backend/backend/.env
+backend/.env
+
+# ─── TypeScript ───────────────────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ─── SQLite database (dev only, don't commit) ─────────────────────────────────
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+backend/backend/prisma/*.db
+
+# ─── Editor / OS ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+*.swp
+*.swo
+
+# ─── TanStack / Build cache ───────────────────────────────────────────────────
+.tanstack/
+.wrangler/
+
+# ─── Bun ──────────────────────────────────────────────────────────────────────
+bun.lockb

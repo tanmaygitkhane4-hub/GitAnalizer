@@ -1,0 +1,15 @@
+{
+  "name": "dev-career",
+  "version": "1.0.0",
+  "description": "CodeAudit — Developer Career Intelligence Platform",
+  "private": true,
+  "scripts": {
+    "dev": "start cmd /k \"cd backend\\backend && npm run dev\" && start cmd /k \"cd backend && npm run dev\"",
+    "dev:api": "cd backend\\backend && npm run dev",
+    "dev:ui": "cd backend && npm run dev",
+    "install:all": "cd backend && npm install && cd ..\\backend\\backend && npm install",
+    "db:push": "cd backend\\backend && npm run db:push",
+    "db:generate": "cd backend\\backend && npm run db:generate",
+    "db:studio": "cd backend\\backend && npm run db:studio"
+  }
+}
